@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LND Multi-Tool Suite</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>LND Multi-Tool Suite</h1>
+            <p>AI-Powered Tools for Creative Professionals</p>
+        </header>
+
+        <nav class="nav-tabs">
+            <button class="nav-tab active" onclick="switchTab('textToImage')">Text to Image</button>
+            <button class="nav-tab" onclick="switchTab('webScrap')">Web-Scrap Images</button>
+            <button class="nav-tab" onclick="switchTab('textToSpeech')">Text to Speech</button>
+            <button class="nav-tab" onclick="switchTab('moreTools')">More Tools</button>
+        </nav>
+
+        <main class="main-content">
+            <section id="textToImage" class="tool-section active">
+                <h2>Text to Image</h2>
+                <form id="imageForm">
+                    <textarea id="prompt" placeholder="Enter your prompt..."></textarea>
+                    <select id="imageCount">
+                        <option value="1">1 Image</option>
+                        <option value="4">4 Images</option>
+                        <option value="8">8 Images</option>
+                    </select>
+                    <select id="apiProvider">
+                        <option value="pollinations">Pollinations</option>
+                        <option value="stablehorde">Stable Horde</option>
+                        <option value="lexica">Lexica</option>
+                    </select>
+                    <button type="submit" id="generateBtn">Generate</button>
+                </form>
+                <div id="resultsContainer"></div>
+            </section>
+
+            <section id="webScrap" class="tool-section">
+                <h2>Web-Scrap Images</h2>
+                <form id="scrapeForm">
+                    <input type="text" id="scrapeKeyword" placeholder="Enter keyword...">
+                    <select id="scrapeCount">
+                        <option value="10">10 Images</option>
+                        <option value="20">20 Images</option>
+                        <option value="50">50 Images</option>
+                    </select>
+                    <button type="submit" id="scrapBtn">Scrape</button>
+                </form>
+                <div id="scrapResultsContainer"></div>
+            </section>
+
+            <section id="textToSpeech" class="tool-section">
+                <h2>Text to Speech</h2>
+                <form id="ttsForm">
+                    <textarea id="ttsText" placeholder="Enter text..."></textarea>
+                    <select id="ttsVoice"></select>
+                    <button type="submit" id="ttsGenerateBtn">Generate Speech</button>
+                </form>
+                <div id="ttsResultsContainer"></div>
+            </section>
+
+            <section id="moreTools" class="tool-section">
+                <h2>More Tools</h2>
+                <div class="tools-grid">
+                    <div class="tool-card" onclick="selectTool('grammarChecker')">Grammar Checker</div>
+                    <div class="tool-card" onclick="selectTool('textSummarizer')">Text Summarizer</div>
+                    <div class="tool-card tool-under-construction">Paraphraser <span class="soon-badge">Coming Soon</span></div>
+                    <div class="tool-card" onclick="selectTool('languageTranslator')">Language Translator</div>
+                    <div class="tool-card tool-under-construction">Sentiment Analyzer <span class="soon-badge">Coming Soon</span></div>
+                    <div class="tool-card tool-under-construction">Keyword Extractor <span class="soon-badge">Coming Soon</span></div>
+                </div>
+                <div id="toolInterface" class="tool-interface"></div>
+            </section>
+        </main>
+
+        <div id="settingsModal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn" id="closeSettingsModal">&times;</span>
+                <h2>API Key Settings</h2>
+                <div class="form-group">
+                    <label for="geminiKey">Google Gemini API Key:</label>
+                    <input type="password" id="geminiKey">
+                </div>
+                <div class="form-group">
+                    <label for="openrouterKey">OpenRouter API Key:</label>
+                    <input type="password" id="openrouterKey">
+                </div>
+                <button id="saveKeysBtn">Save Keys</button>
+            </div>
+        </div>
+        <button id="settingsBtn">Settings</button>
+    </div>
+
+    <script src="js/main.js"></script>
+    <script src="js/modules/chatbot.js"></script>
+    <script src="js/modules/textToImage.js"></script>
+    <script src="js/modules/textToSpeech.js"></script>
+    <script src="js/modules/webScrap.js"></script>
+    <script src="js/modules/settings.js"></script>
+    <script src="tools/grammar-checker.js"></script>
+    <script src="tools/text-summarizer.js"></script>
+    <script src="tools/translator.js"></script>
+</body>
+</html>
