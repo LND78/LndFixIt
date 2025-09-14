@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Sitemaps for both versions
+Sitemap: https://www.namansoni.in/sitemap.xml
