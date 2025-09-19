@@ -22,7 +22,6 @@ const TextToImage = () => {
   const [enhancePrompt, setEnhancePrompt] = useState(true);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [originalPrompt, setOriginalPrompt] = useState('');
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [statusText, setStatusText] = useState('');
   const [imageModels, setImageModels] = useState<PollinationModel[]>([]);
@@ -69,7 +68,6 @@ const TextToImage = () => {
         'sexyai', 'pornpen', 'soulgen', 'dreamgf', 'icegirls'
     ];
 
-    // Use pollinations if consistent images is enabled or seed is provided
     const selectedProvider = (useConsistentImages || seed) ? 'pollinations' : 
         (apiProvider === 'random' ? providers[Math.floor(Math.random() * providers.length)] : apiProvider);
 
@@ -80,7 +78,6 @@ const TextToImage = () => {
         try {
             let imageUrl;
             
-            // Generate seed value
             const seedValue = seed ? parseInt(seed) || seed : (useConsistentImages ? 42 : Date.now() + index + retry);
 
             if (selectedProvider === 'pollinations' || retry === 0) {
@@ -146,39 +143,42 @@ const TextToImage = () => {
     event.preventDefault();
     if (isGenerating || isEnhancing) return;
 
+    // This variable will hold the prompt used for generation.
+    // It starts as the user's typed prompt.
     let promptForGeneration = prompt;
     
-    if (!originalPrompt) {
-      setOriginalPrompt(prompt);
-    }
-
+    // Enhance prompt if enabled
     if (enhancePrompt && !useConsistentImages && seed.trim() === '') {
       setIsEnhancing(true);
       setStatusText('Enhancing your prompt with AI...');
-      const promptToEnhance = originalPrompt || prompt;
-      const enhancedVersion = await enhancePromptWithAI(promptToEnhance);
       
-      setPrompt(enhancedVersion);
+      // Get the enhanced version
+      const enhancedVersion = await enhancePromptWithAI(prompt);
+      
+      // Use the enhanced version for generation
       promptForGeneration = enhancedVersion;
+      
+      // **CHANGE:** We no longer call setPrompt(enhancedVersion) here.
+      // The text field will remain unchanged.
+      
       setIsEnhancing(false);
     }
 
     setIsGenerating(true);
     setGeneratedImages([]);
-    setOriginalPrompt('');
-
+    
     let finalPrompt = promptForGeneration;
     if (style) finalPrompt += `, ${style} style`;
     if (quality) finalPrompt += `, ${quality} quality`;
 
-    const newImages: GeneratedImage[] = [];
-
     for (let i = 0; i < imageCount; i++) {
       setStatusText(`Generating image ${i + 1} of ${imageCount}...`);
       try {
+        // We pass the potentially enhanced 'finalPrompt' to the generator
         const imageData = await generateSingleImage(finalPrompt, apiProvider, i);
         if (imageData) {
-          newImages.push(imageData);
+          // But when displaying, we can show the user's original prompt if desired,
+          // or the enhanced one. Here we show the one used for generation.
           setGeneratedImages(prevImages => [...prevImages, imageData]);
         }
       } catch (error) {
@@ -215,10 +215,7 @@ const TextToImage = () => {
                 placeholder="Enter your imagination, and let LND Ai Bring it for you!"
                 required
                 value={prompt}
-                onChange={(e) => {
-                  setPrompt(e.target.value);
-                  setOriginalPrompt(e.target.value);
-                }}
+                onChange={(e) => setPrompt(e.target.value)}
               ></textarea>
             </div>
           </div>
@@ -380,7 +377,7 @@ const TextToImage = () => {
             </div>
           )}
 
-          {(generatedImages.length > 0) && (
+          {generatedImages.length > 0 && (
             <div className="image-grid">
               {generatedImages.map((image, index) => (
                 <div key={index} className="image-card">
