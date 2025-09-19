@@ -2,7 +2,8 @@
 // The text-to-image functionality is implemented on the client-side to replicate the behavior of the original index.html file,
 // which uses a variety of public APIs with fallbacks. This approach was requested by the user to fix issues with a
 // non-functional backend API endpoint. While not ideal for a production environment, it fulfills the user's immediate requirements.
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { fetchImageModels, PollinationModel } from '../utils/pollinationModels';
 
 interface GeneratedImage {
   url: string;
@@ -16,9 +17,31 @@ const TextToImage = () => {
   const [style, setStyle] = useState('');
   const [quality, setQuality] = useState('standard');
   const [apiProvider, setApiProvider] = useState('random');
+  const [seed, setSeed] = useState('');
+  const [useConsistentImages, setUseConsistentImages] = useState(false);
+  const [enhancePrompt, setEnhancePrompt] = useState(true);
+  const [isEnhancing, setIsEnhancing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [originalPrompt, setOriginalPrompt] = useState('');
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [statusText, setStatusText] = useState('');
+  const [imageModels, setImageModels] = useState<PollinationModel[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
+
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        const models = await fetchImageModels();
+        setImageModels(models);
+      } catch (error) {
+        console.error('Failed to load image models:', error);
+      } finally {
+        setIsLoadingModels(false);
+      }
+    };
+    
+    loadModels();
+  }, []);
 
   const downloadImage = async (url: string, filename: string) => {
     try {
@@ -46,9 +69,9 @@ const TextToImage = () => {
         'sexyai', 'pornpen', 'soulgen', 'dreamgf', 'icegirls'
     ];
 
-    const selectedProvider = apiProvider === 'random'
-        ? providers[Math.floor(Math.random() * providers.length)]
-        : apiProvider;
+    // Use pollinations if consistent images is enabled or seed is provided
+    const selectedProvider = (useConsistentImages || seed) ? 'pollinations' : 
+        (apiProvider === 'random' ? providers[Math.floor(Math.random() * providers.length)] : apiProvider);
 
     const maxRetries = 4;
     let lastError = null;
@@ -56,13 +79,16 @@ const TextToImage = () => {
     for (let retry = 0; retry < maxRetries; retry++) {
         try {
             let imageUrl;
+            
+            // Generate seed value
+            const seedValue = seed ? parseInt(seed) || seed : (useConsistentImages ? 42 : Date.now() + index + retry);
 
             if (selectedProvider === 'pollinations' || retry === 0) {
-                imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=512&nologo=true&seed=${Date.now() + index + retry}`;
+                imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=512&nologo=true&seed=${seedValue}`;
             } else if (retry === 1) {
-                imageUrl = `https://api.deepai.org/api/text2img?text=${encodeURIComponent(prompt)}&grid_size=1&width=512&height=512&seed=${Date.now() + index + retry}`;
+                imageUrl = `https://api.deepai.org/api/text2img?text=${encodeURIComponent(prompt)}&grid_size=1&width=512&height=512&seed=${seedValue}`;
             } else if (retry === 2) {
-                imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?seed=${Date.now() + index}&width=1024&height=1024&nologo=true&model=turbo`;
+                imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?seed=${seedValue}&width=1024&height=1024&nologo=true&model=turbo`;
             } else {
                 imageUrl = `https://source.unsplash.com/512x512/?${encodeURIComponent(prompt.split(' ').slice(0, 3).join(','))}&sig=${Date.now() + index + retry}`;
             }
@@ -94,14 +120,67 @@ const TextToImage = () => {
     return null;
   }
 
+  const enhancePromptWithAI = async (originalPrompt: string): Promise<string> => {
+    try {
+      // Per user request, construct a specific URL for Pollinations AI to ensure
+      // it returns only the enhanced prompt text without any additional conversational output.
+
+      // 1. Format the user's prompt by replacing all spaces with underscores.
+      const formattedPrompt = originalPrompt.replace(/ /g, '_');
+
+      // 2. Define the static instruction part of the URL.
+      const instruction = ",_you_only_have_to_give_paragraph_to_directly_feed_model_keep_in_mind_only_give_output_as_prompt_paragraph_without_any_other_text_";
+
+      // 3. Generate a random 2-digit number (from 10 to 99) to prevent API caching.
+      const randomSuffix = Math.floor(Math.random() * 90) + 10;
+
+      // 4. Assemble the final URL.
+      const enhanceUrl = `https://text.pollinations.ai/enhance_this_prompt_${formattedPrompt}${instruction}${randomSuffix}`;
+      
+      const response = await fetch(enhanceUrl);
+      
+      if (response.ok) {
+        const enhancedText = await response.text();
+        // The API should return just the text, so we trim any leading/trailing whitespace.
+        return enhancedText.trim();
+      } else {
+        // If the API call fails, log the issue and fall back to the original prompt.
+        console.warn(`Prompt enhancement failed with status: ${response.status}`);
+        return originalPrompt;
+      }
+    } catch (error) {
+      console.error('Failed to enhance prompt:', error);
+      // In case of a network error, fall back to the original prompt.
+      return originalPrompt;
+    }
+  };
+
   const handleFormSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (isGenerating) return;
+    if (isGenerating || isEnhancing) return;
+
+    // Store the original prompt if not already stored
+    if (!originalPrompt) {
+      setOriginalPrompt(prompt);
+    }
+
+    let finalPrompt = prompt;
+
+    // Enhance prompt if enabled and not using consistent images or seed
+    if (enhancePrompt && !useConsistentImages && seed.trim() === '') {
+      setIsEnhancing(true);
+      setStatusText('Enhancing your prompt with AI...');
+      // Use original prompt for enhancement, or current prompt if no original is stored
+      const promptToEnhance = originalPrompt || prompt;
+      finalPrompt = await enhancePromptWithAI(promptToEnhance);
+      setPrompt(finalPrompt); // Update the textarea with the enhanced prompt
+      setIsEnhancing(false);
+    }
 
     setIsGenerating(true);
     setGeneratedImages([]);
 
-    let enhancedPrompt = prompt;
+    let enhancedPrompt = finalPrompt;
     if (style) enhancedPrompt += `, ${style} style`;
     if (quality) enhancedPrompt += `, ${quality} quality`;
 
@@ -129,7 +208,19 @@ const TextToImage = () => {
       <div className="control-panel slide-up">
         <form id="imageForm" onSubmit={handleFormSubmit}>
           <div className="form-group">
-            <label htmlFor="prompt" className="form-label">✨ Describe Your Vision</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <label htmlFor="prompt" className="form-label">✨ Describe Your Vision</label>
+              <label className="checkbox-label" style={{ fontSize: '0.9rem', margin: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={enhancePrompt}
+                  onChange={(e) => setEnhancePrompt(e.target.checked)}
+                  disabled={useConsistentImages || seed.trim() !== ''}
+                />
+                <span className="checkmark"></span>
+                ✨ Enhance Prompt
+              </label>
+            </div>
             <div className="prompt-container">
               <textarea
                 id="prompt"
@@ -137,7 +228,13 @@ const TextToImage = () => {
                 placeholder="Enter your imagination, and let LND Ai Bring it for you!"
                 required
                 value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
+                onChange={(e) => {
+                  setPrompt(e.target.value);
+                  // Store original prompt when user starts typing
+                  if (!originalPrompt && e.target.value.trim()) {
+                    setOriginalPrompt(e.target.value);
+                  }
+                }}
               ></textarea>
             </div>
           </div>
@@ -201,39 +298,88 @@ const TextToImage = () => {
             </div>
 
             <div className="form-group">
+              <label htmlFor="seed" className="form-label">🎲 Seed (Optional)</label>
+              <input
+                type="text"
+                id="seed"
+                className="form-input"
+                value={seed}
+                onChange={(e) => {
+                  setSeed(e.target.value);
+                  // Disable enhance prompt when seed is provided
+                  if (e.target.value.trim() !== '') {
+                    setEnhancePrompt(false);
+                  }
+                }}
+                placeholder="Enter seed for reproducible results"
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={useConsistentImages}
+                  onChange={(e) => {
+                    setUseConsistentImages(e.target.checked);
+                    if (e.target.checked) {
+                      setApiProvider('pollinations');
+                      setEnhancePrompt(false); // Disable enhance prompt when consistent images is enabled
+                    }
+                  }}
+                />
+                <span className="checkmark"></span>
+                🔄 Make Consistent Images (Auto-selects Pollinations AI)
+              </label>
+            </div>
+
+            <div className="form-group">
               <label htmlFor="apiProvider" className="form-label">🔮 AI Engine</label>
               <div className="select-wrapper">
-                <select id="apiProvider" className="custom-select" value={apiProvider} onChange={(e) => setApiProvider(e.target.value)}>
-                  <option value="random">🎲 Shuffle Random (Recommended)</option>
-                  <option value="pollinations">Pollinations AI ( By LND AI )</option>
-                  <option value="deepai">DeepAI Engine ( By LND AI )</option>
-                  <option value="huggingface">Google Nano Banana ( By LND AI )</option>
-                  <option value="modelslab">Nano Banana Free ( By LND AI )</option>
-                  <option value="replicate">Replicate AI ( By LND AI )</option>
-                  <option value="perchance">Dalle ( By LND AI )</option>
-                  <option value="raphaelai">Raphael AI  ( By LND AI )</option>
-                  <option value="venice">Venice AI  ( By LND AI )</option>
-                  <option value="nastia">Nano Banana preview ( By LND AI )</option>
-                  <option value="vadoo">Vadoo AI  ( By LND AI )</option>
-                  <option value="flux">FLUX.1  ( By LND AI )</option>
-                  <option value="stablediffusion">Stable Diffusion  ( By LND AI )</option>
-                  <option value="aiscribble">AIScribble  ( By LND AI )</option>
-                  <option value="nsfwai">NSFW AI Generator  ( By LND AI )</option>
-                  <option value="dynapictures">Nano Banana Pro ( By LND AI )</option>
-                  <option value="gemini">Nano Banana ( By LND AI )</option>
-                  <option value="sexyai">Gemni Image Flash  ( By LND AI )</option>
-                  <option value="pornpen">Pornpen Ai  ( By LND AI )</option>
-                  <option value="soulgen">SoulGen  ( By LND AI )</option>
-                  <option value="dreamgf">DreamGF AI  ( By LND AI )</option>
-                  <option value="icegirls">IceGirls AI  ( By LND AI )</option>
+                <select 
+                  id="apiProvider" 
+                  className="custom-select" 
+                  value={apiProvider} 
+                  onChange={(e) => setApiProvider(e.target.value)}
+                  disabled={useConsistentImages || seed || isLoadingModels}
+                >
+                  <option value="random">🎲 Shuffle Random (LND AI, Better than Nano Banana)</option>
+                  <option value="pollinations">🌟 Pollinations AI (LND AI, Better than Nano Banana Pro)</option>
+                  
+                  {/* Dynamically loaded Pollination AI models */}
+                  {imageModels.map((model, index) => (
+                    <option key={`pollination-${model.id}-${index}`} value={model.id}>
+                      🤖 {model.name} (LND AI, Better than Google Nano Banana)
+                    </option>
+                  ))}
+                  
+                  {/* Legacy options for compatibility */}
+                  <option value="deepai">🤖 DeepAI Engine (LND AI, Better than Gemini Image Generator)</option>
+                  <option value="huggingface">🤗 Hugging Face Models (LND AI, Better than Nano Banana Fast)</option>
+                  <option value="modelslab">🔬 ModelsLab API (LND AI, Better than Google Nano Banana)</option>
+                  <option value="replicate">🔄 Replicate AI (LND AI, Better than Nano Banana Pro)</option>
+                  <option value="perchance">🎯 Perchance Generator (LND AI, Better than Gemini Image Generator)</option>
+                  <option value="raphaelai">🎭 Raphael AI (LND AI, Better than Nano Banana)</option>
+                  <option value="venice">🏛️ Venice AI (LND AI, Better than Google Nano Banana Fast)</option>
+                  <option value="nastia">💫 Nastia AI (LND AI, Better than Nano Banana Pro)</option>
+                  <option value="vadoo">📹 Vadoo AI (LND AI, Better than Gemini Image Generator)</option>
+                  <option value="aiscribble">✏️ AIScribble (LND AI, Better than Nano Banana)</option>
+                  <option value="dynapictures">📸 DynaPictures (LND AI, Better than Google Nano Banana)</option>
+                  <option value="gemini">💎 Gemini Vision (LND AI, Better than Nano Banana Fast)</option>
+                  <option value="sexyai">🔥 SexyAI Generator (LND AI, Better than Nano Banana Pro)</option>
+                  <option value="pornpen">🖊️ PornPen AI (LND AI, Better than Gemini Image Generator)</option>
+                  <option value="soulgen">👤 SoulGen (LND AI, Better than Nano Banana)</option>
+                  <option value="dreamgf">💕 DreamGF AI (LND AI, Better than Google Nano Banana)</option>
+                  <option value="icegirls">❄️ IceGirls AI (LND AI, Better than Nano Banana Fast)</option>
+                  <option value="nsfwai">🔞 NSFW AI Generator (LND AI, Better than Nano Banana Pro)</option>
                 </select>
               </div>
             </div>
           </div>
 
-          <button type="submit" className="generate-btn" id="generateBtn" disabled={isGenerating}>
+          <button type="submit" className="generate-btn" id="generateBtn" disabled={isGenerating || isEnhancing}>
             <span className="btn-icon">🚀</span>
-            {isGenerating ? 'Generating...' : 'Generate Images using LND Ai'}
+            {isEnhancing ? 'Enhancing Prompt...' : isGenerating ? 'Generating...' : 'Generate Images using LND Ai'}
           </button>
         </form>
       </div>

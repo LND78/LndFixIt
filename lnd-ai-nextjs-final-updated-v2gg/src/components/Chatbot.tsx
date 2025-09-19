@@ -1,14 +1,33 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
+import { fetchTextModels, getChatModels, PollinationModel } from '../utils/pollinationModels';
 
 const Chatbot = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([{ role: 'bot', content: "Hello! I'm your LND AI assistant. Welcome To LND Ai. How can I assist you today?" }]);
   const [input, setInput] = useState('');
-  const [model, setModel] = useState('pollinations');
+  const [model, setModel] = useState('openai');
   const [isLoading, setIsLoading] = useState(false);
   const [keepContext, setKeepContext] = useState(true);
+  const [chatModels, setChatModels] = useState<PollinationModel[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        await fetchTextModels(); // Ensure models are loaded
+        const models = getChatModels();
+        setChatModels(models);
+      } catch (error) {
+        console.error('Failed to load chat models:', error);
+      } finally {
+        setIsLoadingModels(false);
+      }
+    };
+    
+    loadModels();
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -24,30 +43,19 @@ const Chatbot = () => {
     setIsLoading(true);
 
     try {
-      const payload = {
-        message: input,
-        model: model,
-        history: keepContext ? newMessages.slice(0, -1) : [],
-      };
-
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
+      // Use Pollination AI Text API for all models
+      const encodedMessage = encodeURIComponent(input);
+      const response = await fetch(`https://text.pollinations.ai/${encodedMessage}?model=${model}`);
+      
       if (!response.ok) {
-        throw new Error('Failed to get response from AI');
+        throw new Error("Failed to get response from Pollination AI");
       }
-
-      const data = await response.json();
-      setMessages([...newMessages, { role: 'bot', content: data.reply }]);
-
+      
+      const reply = await response.text();
+      setMessages([...newMessages, { role: "bot", content: reply }]);
     } catch (error) {
-      console.error(error);
-      setMessages([...newMessages, { role: 'bot', content: 'Sorry, I encountered an error. Please try again.' }]);
+      console.error("Error sending message:", error);
+      setMessages(prev => [...prev, { role: "bot", content: "Sorry, something went wrong." }]);
     } finally {
       setIsLoading(false);
     }
@@ -60,10 +68,22 @@ const Chatbot = () => {
         <div className="chatbot-window open" id="chatbotWindow">
           <div className="chatbot-header">
             <div className="chatbot-title">🤖 AI Assistant</div>
-            <select className="chat-model-select" id="chatModelSelect" value={model} onChange={(e) => setModel(e.target.value)}>
-              <option value="pollinations">Pollinations AI</option>
-              <option value="gemini">Google Gemini</option>
-              <option value="deepseek">DeepSeek R1</option>
+            <select 
+              className="chat-model-select" 
+              id="chatModelSelect" 
+              value={model} 
+              onChange={(e) => setModel(e.target.value)}
+              disabled={isLoadingModels}
+            >
+              {isLoadingModels ? (
+                <option>Loading models...</option>
+              ) : (
+                chatModels.map((chatModel) => (
+                  <option key={chatModel.id} value={chatModel.id}>
+                    {chatModel.name}
+                  </option>
+                ))
+              )}
             </select>
             <button className="chatbot-close" onClick={() => setIsOpen(false)}>✕</button>
           </div>
