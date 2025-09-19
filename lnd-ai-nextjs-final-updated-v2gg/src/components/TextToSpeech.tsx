@@ -600,7 +600,7 @@ const TextToSpeech = () => {
           <h3 style={{ marginBottom: '15px' }}>ℹ️ How to Use</h3>
           <ul style={{ lineHeight: '1.6', color: 'var(--text-muted)' }}>
             <li><strong>API Provider:</strong> High-quality speech generation using external APIs. Supports MP3 download.</li>
-            <li><strong>Browser TTS:</strong> Uses your browser's built-in text-to-speech engine. Works offline.</li>
+            <li><strong>Browser TTS:</strong> Uses your browser&apos;s built-in text-to-speech engine. Works offline.</li>
             <li><strong>Voice Selection:</strong> Choose from available voices based on your selected provider.</li>
             <li><strong>Speed Control:</strong> Adjust speech rate from 0.5x to 2x for optimal listening.</li>
             <li><strong>Audio Controls:</strong> Play, pause, stop, and download generated speech.</li>
