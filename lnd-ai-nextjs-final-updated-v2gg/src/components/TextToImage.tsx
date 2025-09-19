@@ -122,19 +122,9 @@ const TextToImage = () => {
 
   const enhancePromptWithAI = async (originalPrompt: string): Promise<string> => {
     try {
-      // **THE CORRECT FIX:** Following user's instructions precisely.
-
-      // 1. Generate a random 2-digit number for cache busting.
       const randomSuffix = Math.floor(Math.random() * 90) + 10; // 10-99
-
-      // 2. Replace all spaces in the user's prompt with underscores.
       const promptWithUnderscores = originalPrompt.replace(/ /g, '_');
-      
-      // 3. Construct the exact URL path "magic phrase" that the Pollinations API expects.
-      // This structure is rigid and must be followed exactly.
       const urlPath = `enhance_this_prompt_${promptWithUnderscores}_,_you_only_have_to_give_paragraph_to_directly_feed_model_keep_in_mind_only_give_output_as_prompt_paragraph_without_any_other_text_${randomSuffix}`;
-
-      // 4. Create the final URL. No further encoding is needed on this pre-formatted path.
       const enhanceUrl = `https://text.pollinations.ai/${urlPath}`;
 
       const response = await fetch(enhanceUrl);
@@ -156,33 +146,25 @@ const TextToImage = () => {
     event.preventDefault();
     if (isGenerating || isEnhancing) return;
 
-    // Use a temporary variable for the prompt to avoid state update delays
     let promptForGeneration = prompt;
     
-    // Store the original prompt when the user submits, if they haven't changed it since last time
     if (!originalPrompt) {
       setOriginalPrompt(prompt);
     }
 
-    // Enhance prompt if enabled and not using consistent images or seed
     if (enhancePrompt && !useConsistentImages && seed.trim() === '') {
       setIsEnhancing(true);
       setStatusText('Enhancing your prompt with AI...');
-      // Always enhance the *original* prompt the user wrote, not a previously enhanced one
       const promptToEnhance = originalPrompt || prompt;
       const enhancedVersion = await enhancePromptWithAI(promptToEnhance);
       
-      // Update the text area with the new prompt so the user sees it
       setPrompt(enhancedVersion);
-      // Use the newly enhanced prompt for this generation cycle
       promptForGeneration = enhancedVersion;
       setIsEnhancing(false);
     }
 
     setIsGenerating(true);
     setGeneratedImages([]);
-    
-    // Reset original prompt so next submission captures the current text field value
     setOriginalPrompt('');
 
     let finalPrompt = promptForGeneration;
@@ -235,7 +217,6 @@ const TextToImage = () => {
                 value={prompt}
                 onChange={(e) => {
                   setPrompt(e.target.value);
-                  // Continuously update the original prompt as the user types
                   setOriginalPrompt(e.target.value);
                 }}
               ></textarea>
@@ -309,7 +290,6 @@ const TextToImage = () => {
                 value={seed}
                 onChange={(e) => {
                   setSeed(e.target.value);
-                  // Disable enhance prompt when seed is provided
                   if (e.target.value.trim() !== '') {
                     setEnhancePrompt(false);
                   }
@@ -327,7 +307,7 @@ const TextToImage = () => {
                     setUseConsistentImages(e.target.checked);
                     if (e.target.checked) {
                       setApiProvider('pollinations');
-                      setEnhancePrompt(false); // Disable enhance prompt when consistent images is enabled
+                      setEnhancePrompt(false);
                     }
                   }}
                 />
@@ -349,14 +329,12 @@ const TextToImage = () => {
                   <option value="random">🎲 Shuffle Random (LND AI, Better than Nano Banana)</option>
                   <option value="pollinations">🌟 Pollinations AI (LND AI, Better than Nano Banana Pro)</option>
                   
-                  {/* Dynamically loaded Pollination AI models */}
                   {imageModels.map((model, index) => (
                     <option key={`pollination-${model.id}-${index}`} value={model.id}>
                       🤖 {model.name} (LND AI, Better than Google Nano Banana)
                     </option>
                   ))}
                   
-                  {/* Legacy options for compatibility */}
                   <option value="deepai">🤖 DeepAI Engine (LND AI, Better than Gemini Image Generator)</option>
                   <option value="huggingface">🤗 Hugging Face Models (LND AI, Better than Nano Banana Fast)</option>
                   <option value="modelslab">🔬 ModelsLab API (LND AI, Better than Google Nano Banana)</option>
@@ -405,24 +383,4 @@ const TextToImage = () => {
           {(generatedImages.length > 0) && (
             <div className="image-grid">
               {generatedImages.map((image, index) => (
-                <div key={index} className="image-card">
-                  <div className="image-container">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={image.url} alt={image.prompt} className="generated-image" loading="lazy" />
-                    <div className="image-overlay">
-                      <button onClick={() => downloadImage(image.url, `lnd-ai-generated-${index}.jpg`)} className="download-btn">
-                        ⬇️ Download
-                      </button>
-                    </div>
-                  </div>
-                  <div className="image-info">
-                    <div className="image-source">🎨 {image.provider}</div>
-                    <div className="image-prompt" style={{wordBreak: "break-all"}}>{image.prompt}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {isGenerating && generatedImages.length > 0 && (
-             
+                <div key={index} className="image
