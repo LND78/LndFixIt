@@ -383,4 +383,43 @@ const TextToImage = () => {
           {(generatedImages.length > 0) && (
             <div className="image-grid">
               {generatedImages.map((image, index) => (
-                <div key={index} className="image
+                <div key={index} className="image-card">
+                  <div className="image-container">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={image.url} alt={image.prompt} className="generated-image" loading="lazy" />
+                    <div className="image-overlay">
+                      <button onClick={() => downloadImage(image.url, `lnd-ai-generated-${index}.jpg`)} className="download-btn">
+                        ⬇️ Download
+                      </button>
+                    </div>
+                  </div>
+                  <div className="image-info">
+                    <div className="image-source">🎨 {image.provider}</div>
+                    <div className="image-prompt" style={{wordBreak: "break-all"}}>{image.prompt}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {isGenerating && generatedImages.length > 0 && (
+            <div className="loading-container" style={{ padding: '40px' }}>
+              <div className="loading-spinner"></div>
+              <div className="loading-text">{statusText}</div>
+            </div>
+          )}
+
+          {!isGenerating && generatedImages.length === 0 && (
+            <div className="empty-state">
+              <div className="empty-icon">🎨</div>
+              <div className="empty-text">Ready to Generate Free Images</div>
+              <div className="empty-subtext">Enter your prompt above and let LND AI bring your imagination to life</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+export default TextToImage;
