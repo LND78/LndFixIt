@@ -122,11 +122,19 @@ const TextToImage = () => {
 
   const enhancePromptWithAI = async (originalPrompt: string): Promise<string> => {
     try {
-      // Generate a random 2-digit number to prevent caching
+      // Generate a random 2-digit number to prevent caching, as requested.
       const randomSuffix = Math.floor(Math.random() * 90) + 10; // Generates 10-99
       
+      // Per user instructions, replace spaces with underscores.
       const promptWithUnderscores = originalPrompt.replace(/ /g, '_');
-      const enhanceUrl = `https://text.pollinations.ai/enhance_this_prompt_${promptWithUnderscores}_,_you_only_have_to_give_paragraph_to_directly_feed_model_keep_in_mind_only_give_output_as_prompt_paragraph_without_any_other_text_${randomSuffix}`;
+      
+      // The crucial fix: URL-encode the prompt after replacing spaces.
+      // This ensures any special characters (like commas, quotes, etc.) are handled correctly
+      // and not misinterpreted by the API, which was the cause of the original issue.
+      const encodedPrompt = encodeURIComponent(promptWithUnderscores);
+
+      // Construct the final URL according to the specified pattern.
+      const enhanceUrl = `https://text.pollinations.ai/enhance_this_prompt_${encodedPrompt}_,_you_only_have_to_give_paragraph_to_directly_feed_model_keep_in_mind_only_give_output_as_prompt_paragraph_without_any_other_text_${randomSuffix}`;
 
       const response = await fetch(enhanceUrl);
       
@@ -134,6 +142,7 @@ const TextToImage = () => {
         const enhancedText = await response.text();
         return enhancedText.trim();
       } else {
+        console.warn(`Prompt enhancement failed with status ${response.status}. Using original prompt.`);
         return originalPrompt;
       }
     } catch (error) {
@@ -152,7 +161,6 @@ const TextToImage = () => {
     }
 
     let finalPrompt = prompt;
-    let promptWasEnhanced = false;
 
     // Enhance prompt if enabled and not using consistent images or seed
     if (enhancePrompt && !useConsistentImages && seed.trim() === '') {
@@ -161,26 +169,22 @@ const TextToImage = () => {
       // Use original prompt for enhancement, or current prompt if no original is stored
       const promptToEnhance = originalPrompt || prompt;
       finalPrompt = await enhancePromptWithAI(promptToEnhance);
-      setPrompt(finalPrompt); // Update the textarea with the enhanced prompt
-      promptWasEnhanced = true;
       setIsEnhancing(false);
     }
 
     setIsGenerating(true);
     setGeneratedImages([]);
 
-    let imageGenerationPrompt = finalPrompt;
-    if (!promptWasEnhanced) {
-      if (style) imageGenerationPrompt += `, ${style} style`;
-      if (quality) imageGenerationPrompt += `, ${quality} quality`;
-    }
+    let enhancedPrompt = finalPrompt;
+    if (style) enhancedPrompt += `, ${style} style`;
+    if (quality) enhancedPrompt += `, ${quality} quality`;
 
     const newImages: GeneratedImage[] = [];
 
     for (let i = 0; i < imageCount; i++) {
       setStatusText(`Generating image ${i + 1} of ${imageCount}...`);
       try {
-        const imageData = await generateSingleImage(imageGenerationPrompt, apiProvider, i);
+        const imageData = await generateSingleImage(enhancedPrompt, apiProvider, i);
         if (imageData) {
           newImages.push(imageData);
           setGeneratedImages([...newImages]);
