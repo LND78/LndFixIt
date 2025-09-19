@@ -1,444 +1,614 @@
 "use client";
-// The text-to-image functionality is implemented on the client-side to replicate the behavior of the original index.html file,
-// which uses a variety of public APIs with fallbacks. This approach was requested by the user to fix issues with a
-// non-functional backend API endpoint. While not ideal for a production environment, it fulfills the user's immediate requirements.
-import React, { useState, useEffect } from 'react';
-import { fetchImageModels, PollinationModel } from '../utils/pollinationModels';
+import React, { useState, useRef, useEffect } from 'react';
 
-interface GeneratedImage {
-  url: string;
-  prompt: string;
-  provider: string;
+interface TTSSettings {
+  text: string;
+  voice: string;
+  speed: number;
+  language: string;
+  provider: 'api' | 'browser';
 }
 
-const TextToImage = () => {
-  const [prompt, setPrompt] = useState('');
-  const [imageCount, setImageCount] = useState(1);
-  const [style, setStyle] = useState('');
-  const [quality, setQuality] = useState('standard');
-  const [apiProvider, setApiProvider] = useState('random');
-  const [seed, setSeed] = useState('');
-  const [useConsistentImages, setUseConsistentImages] = useState(false);
-  const [enhancePrompt, setEnhancePrompt] = useState(true);
-  const [isEnhancing, setIsEnhancing] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [originalPrompt, setOriginalPrompt] = useState('');
-  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
-  const [statusText, setStatusText] = useState('');
-  const [imageModels, setImageModels] = useState<PollinationModel[]>([]);
-  const [isLoadingModels, setIsLoadingModels] = useState(true);
+interface AudioState {
+  isPlaying: boolean;
+  currentTime: number;
+  duration: number;
+  isLoading: boolean;
+}
 
+const TextToSpeech = () => {
+  const [settings, setSettings] = useState<TTSSettings>({
+    text: '',
+    voice: 'female',
+    speed: 1.0,
+    language: 'en-US',
+    provider: 'api'
+  });
+  
+  const [audioState, setAudioState] = useState<AudioState>({
+    isPlaying: false,
+    currentTime: 0,
+    duration: 0,
+    isLoading: false
+  });
+  
+  const [audioUrl, setAudioUrl] = useState<string>('');
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [successMessage, setSuccessMessage] = useState<string>('');
+  
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const synthRef = useRef<SpeechSynthesis | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  
+  // Available voices for different providers
+  const apiVoices = [
+    { value: 'female', label: '👩 Female Voice (English)' },
+    { value: 'male', label: '👨 Male Voice (English)' }
+  ];
+  
+  const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
+  
+  // Load browser voices
   useEffect(() => {
-    const loadModels = async () => {
-      try {
-        const models = await fetchImageModels();
-        setImageModels(models);
-      } catch (error) {
-        console.error('Failed to load image models:', error);
-      } finally {
-        setIsLoadingModels(false);
-      }
-    };
-    
-    loadModels();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      synthRef.current = window.speechSynthesis;
+      
+      const loadVoices = () => {
+        const voices = synthRef.current?.getVoices() || [];
+        setBrowserVoices(voices);
+      };
+      
+      loadVoices();
+      synthRef.current?.addEventListener('voiceschanged', loadVoices);
+      
+      return () => {
+        synthRef.current?.removeEventListener('voiceschanged', loadVoices);
+      };
+    }
   }, []);
 
-  const downloadImage = async (url: string, filename: string) => {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
-    } catch (error) {
-      console.error('Download failed:', error);
-      window.open(url, '_blank');
-    }
+  // Audio event handlers
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleLoadedMetadata = () => {
+      setAudioState(prev => ({ ...prev, duration: audio.duration }));
+    };
+
+    const handleTimeUpdate = () => {
+      setAudioState(prev => ({ ...prev, currentTime: audio.currentTime }));
+    };
+
+    const handleEnded = () => {
+      setAudioState(prev => ({ ...prev, isPlaying: false, currentTime: 0 }));
+    };
+
+    const handlePlay = () => {
+      setAudioState(prev => ({ ...prev, isPlaying: true }));
+    };
+
+    const handlePause = () => {
+      setAudioState(prev => ({ ...prev, isPlaying: false }));
+    };
+
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('pause', handlePause);
+
+    return () => {
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('pause', handlePause);
+    };
+  }, [audioUrl]);
+
+  const clearMessages = () => {
+    setErrorMessage('');
+    setSuccessMessage('');
   };
 
-  const generateSingleImage = async (prompt: string, apiProvider: string, index: number): Promise<GeneratedImage | null> => {
-    const providers = [
-        'pollinations', 'deepai', 'huggingface', 'modelslab', 'replicate',
-        'perchance', 'raphaelai', 'venice', 'nastia', 'vadoo', 'flux',
-        'stablediffusion', 'aiscribble', 'nsfwai', 'dynapictures', 'gemini',
-        'sexyai', 'pornpen', 'soulgen', 'dreamgf', 'icegirls'
-    ];
-
-    // Use pollinations if consistent images is enabled or seed is provided
-    const selectedProvider = (useConsistentImages || seed) ? 'pollinations' : 
-        (apiProvider === 'random' ? providers[Math.floor(Math.random() * providers.length)] : apiProvider);
-
-    const maxRetries = 4;
-    let lastError = null;
-
-    for (let retry = 0; retry < maxRetries; retry++) {
-        try {
-            let imageUrl;
-            
-            // Generate seed value
-            const seedValue = seed ? parseInt(seed) || seed : (useConsistentImages ? 42 : Date.now() + index + retry);
-
-            if (selectedProvider === 'pollinations' || retry === 0) {
-                imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=512&nologo=true&seed=${seedValue}`;
-            } else if (retry === 1) {
-                imageUrl = `https://api.deepai.org/api/text2img?text=${encodeURIComponent(prompt)}&grid_size=1&width=512&height=512&seed=${seedValue}`;
-            } else if (retry === 2) {
-                imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?seed=${seedValue}&width=1024&height=1024&nologo=true&model=turbo`;
-            } else {
-                imageUrl = `https://source.unsplash.com/512x512/?${encodeURIComponent(prompt.split(' ').slice(0, 3).join(','))}&sig=${Date.now() + index + retry}`;
-            }
-
-            const testImage = new Image();
-            await new Promise((resolve, reject) => {
-                testImage.onload = resolve;
-                testImage.onerror = reject;
-                testImage.src = imageUrl;
-            });
-
-            return {
-                url: imageUrl,
-                prompt: prompt,
-                provider: selectedProvider,
-            };
-
-        } catch (error) {
-            lastError = error;
-            console.warn(`Attempt ${retry + 1} failed for image ${index + 1}:`, error);
-
-            if (retry < maxRetries - 1) {
-                await new Promise(resolve => setTimeout(resolve, 1000 * (retry + 1)));
-            }
-        }
+  const generateSpeechAPI = async () => {
+    if (!settings.text.trim()) {
+      setErrorMessage('Please enter some text to convert to speech.');
+      return;
     }
 
-    console.error(`Failed to generate image ${index + 1} after ${maxRetries} attempts:`, lastError);
-    return null;
-  }
+    setAudioState(prev => ({ ...prev, isLoading: true }));
+    clearMessages();
 
-  const enhancePromptWithAI = async (originalPrompt: string): Promise<string> => {
     try {
-      // Per user request, construct a specific URL for Pollinations AI to ensure
-      // it returns only the enhanced prompt text without any additional conversational output.
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: settings.text,
+          voice: settings.voice,
+          speed: settings.speed,
+          language: settings.language,
+          provider: 'api'
+        })
+      });
 
-      // 1. Format the user's prompt by replacing all spaces with underscores.
-      const formattedPrompt = originalPrompt.replace(/ /g, '_');
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
 
-      // 2. Define the static instruction part of the URL.
-      const instruction = ",_you_only_have_to_give_paragraph_to_directly_feed_model_keep_in_mind_only_give_output_as_prompt_paragraph_without_any_other_text_";
-
-      // 3. Generate a random 2-digit number (from 10 to 99) to prevent API caching.
-      const randomSuffix = Math.floor(Math.random() * 90) + 10;
-
-      // 4. Assemble the final URL.
-      const enhanceUrl = `https://text.pollinations.ai/enhance_this_prompt_${formattedPrompt}${instruction}${randomSuffix}`;
+      const data = await response.json();
       
-      const response = await fetch(enhanceUrl);
-      
-      if (response.ok) {
-        const enhancedText = await response.text();
-        // The API should return just the text, so we trim any leading/trailing whitespace.
-        return enhancedText.trim();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      if (data.audioUrl) {
+        setAudioUrl(data.audioUrl);
+        setSuccessMessage('Speech generated successfully! You can now play or download it.');
       } else {
-        // If the API call fails, log the issue and fall back to the original prompt.
-        console.warn(`Prompt enhancement failed with status: ${response.status}`);
-        return originalPrompt;
+        throw new Error('No audio URL received from API');
       }
     } catch (error) {
-      console.error('Failed to enhance prompt:', error);
-      // In case of a network error, fall back to the original prompt.
-      return originalPrompt;
+      console.error('API TTS generation failed:', error);
+      setErrorMessage(`Failed to generate speech: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setAudioState(prev => ({ ...prev, isLoading: false }));
     }
   };
 
-  const handleFormSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (isGenerating || isEnhancing) return;
-
-    // Store the original prompt if not already stored
-    if (!originalPrompt) {
-      setOriginalPrompt(prompt);
+  const generateSpeechBrowser = () => {
+    if (!settings.text.trim()) {
+      setErrorMessage('Please enter some text to convert to speech.');
+      return;
     }
 
-    let finalPrompt = prompt;
-
-    // Enhance prompt if enabled and not using consistent images or seed
-    if (enhancePrompt && !useConsistentImages && seed.trim() === '') {
-      setIsEnhancing(true);
-      setStatusText('Enhancing your prompt with AI...');
-      // Use original prompt for enhancement, or current prompt if no original is stored
-      const promptToEnhance = originalPrompt || prompt;
-      finalPrompt = await enhancePromptWithAI(promptToEnhance);
-      setPrompt(finalPrompt); // Update the textarea with the enhanced prompt
-      setIsEnhancing(false);
+    if (!synthRef.current) {
+      setErrorMessage('Speech synthesis not supported in this browser.');
+      return;
     }
 
-    setIsGenerating(true);
-    setGeneratedImages([]);
+    clearMessages();
+    
+    // Stop any current speech
+    synthRef.current.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(settings.text);
+    
+    // Find the selected voice
+    const selectedVoice = browserVoices.find(voice => voice.voiceURI === settings.voice);
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+    }
+    
+    utterance.rate = settings.speed;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    
+    utterance.onstart = () => {
+      setAudioState(prev => ({ ...prev, isPlaying: true }));
+      setSuccessMessage('Speaking...');
+    };
+    
+    utterance.onend = () => {
+      setAudioState(prev => ({ ...prev, isPlaying: false }));
+      setSuccessMessage('Speech completed.');
+    };
+    
+    utterance.onerror = (event) => {
+      setErrorMessage(`Speech synthesis error: ${event.error}`);
+      setAudioState(prev => ({ ...prev, isPlaying: false }));
+    };
+    
+    utteranceRef.current = utterance;
+    synthRef.current.speak(utterance);
+  };
 
-    let enhancedPrompt = finalPrompt;
-    if (style) enhancedPrompt += `, ${style} style`;
-    if (quality) enhancedPrompt += `, ${quality} quality`;
-
-    const newImages: GeneratedImage[] = [];
-
-    for (let i = 0; i < imageCount; i++) {
-      setStatusText(`Generating image ${i + 1} of ${imageCount}...`);
-      try {
-        const imageData = await generateSingleImage(enhancedPrompt, apiProvider, i);
-        if (imageData) {
-          newImages.push(imageData);
-          setGeneratedImages([...newImages]);
+  const togglePlayPause = () => {
+    if (settings.provider === 'browser') {
+      if (audioState.isPlaying) {
+        synthRef.current?.pause();
+        setAudioState(prev => ({ ...prev, isPlaying: false }));
+      } else {
+        synthRef.current?.resume();
+        setAudioState(prev => ({ ...prev, isPlaying: true }));
+      }
+    } else {
+      const audio = audioRef.current;
+      if (audio) {
+        if (audioState.isPlaying) {
+          audio.pause();
+        } else {
+          audio.play().catch(error => {
+            setErrorMessage(`Playback failed: ${error.message}`);
+          });
         }
-      } catch (error) {
-        console.error(error);
       }
     }
+  };
 
-    setIsGenerating(false);
-    setStatusText('');
+  const stopSpeech = () => {
+    if (settings.provider === 'browser') {
+      synthRef.current?.cancel();
+      setAudioState(prev => ({ ...prev, isPlaying: false }));
+    } else {
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    }
+  };
+
+  const downloadAudio = async () => {
+    if (!audioUrl) {
+      setErrorMessage('No audio available to download. Please generate speech first.');
+      return;
+    }
+
+    try {
+      const response = await fetch(audioUrl);
+      if (!response.ok) throw new Error('Download failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tts_audio_${Date.now()}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      setSuccessMessage('Audio downloaded successfully!');
+    } catch (error) {
+      setErrorMessage(`Download failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleGenerate = () => {
+    if (settings.provider === 'api') {
+      generateSpeechAPI();
+    } else {
+      generateSpeechBrowser();
+    }
+  };
+
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const audio = audioRef.current;
+    if (audio) {
+      const newTime = (parseFloat(e.target.value) / 100) * audio.duration;
+      audio.currentTime = newTime;
+    }
   };
 
   return (
-    <section id="textToImage" className="tool-section active">
-      <div className="control-panel slide-up">
-        <form id="imageForm" onSubmit={handleFormSubmit}>
-          <div className="form-group">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-              <label htmlFor="prompt" className="form-label">✨ Describe Your Vision</label>
-              <label className="checkbox-label" style={{ fontSize: '0.9rem', margin: 0 }}>
-                <input
-                  type="checkbox"
-                  checked={enhancePrompt}
-                  onChange={(e) => setEnhancePrompt(e.target.checked)}
-                  disabled={useConsistentImages || seed.trim() !== ''}
-                />
-                <span className="checkmark"></span>
-                ✨ Enhance Prompt
-              </label>
-            </div>
-            <div className="prompt-container">
-              <textarea
-                id="prompt"
-                className="prompt-input"
-                placeholder="Enter your imagination, and let LND Ai Bring it for you!"
-                required
-                value={prompt}
-                onChange={(e) => {
-                  setPrompt(e.target.value);
-                  // Store original prompt when user starts typing
-                  if (!originalPrompt && e.target.value.trim()) {
-                    setOriginalPrompt(e.target.value);
-                  }
-                }}
-              ></textarea>
-            </div>
+    <section className="control-panel slide-up">
+      <h2 className="results-title" style={{ marginBottom: '30px' }}>
+        🔊 Text to Speech Generator
+      </h2>
+      <p className="subtitle" style={{ textAlign: 'center', marginBottom: '40px' }}>
+        Convert text to natural-sounding speech with multiple provider options and full audio controls.
+      </p>
+
+      <div className="tts-container" style={{ maxWidth: '800px', margin: '0 auto' }}>
+        {/* Provider Selection */}
+        <div className="control-group" style={{ marginBottom: '25px' }}>
+          <label style={{ display: 'block', marginBottom: '10px', fontWeight: '600' }}>
+            🎛️ Provider:
+          </label>
+          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+            <button
+              className={`provider-btn ${settings.provider === 'api' ? 'active' : ''}`}
+              onClick={() => setSettings(prev => ({ ...prev, provider: 'api' }))}
+              style={{
+                padding: '10px 20px',
+                border: `2px solid ${settings.provider === 'api' ? 'var(--primary-purple)' : 'var(--glass-border)'}`,
+                background: settings.provider === 'api' ? 'var(--primary-purple)' : 'var(--glass-bg)',
+                color: 'var(--text-light)',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease'
+              }}
+            >
+              🌐 API Provider (High Quality)
+            </button>
+            <button
+              className={`provider-btn ${settings.provider === 'browser' ? 'active' : ''}`}
+              onClick={() => setSettings(prev => ({ ...prev, provider: 'browser' }))}
+              style={{
+                padding: '10px 20px',
+                border: `2px solid ${settings.provider === 'browser' ? 'var(--primary-purple)' : 'var(--glass-border)'}`,
+                background: settings.provider === 'browser' ? 'var(--primary-purple)' : 'var(--glass-bg)',
+                color: 'var(--text-light)',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease'
+              }}
+            >
+              🖥️ Browser TTS (Built-in)
+            </button>
           </div>
-
-          <div className="controls-grid">
-            <div className="form-group">
-              <label htmlFor="imageCount" className="form-label">🎯 Number of Images</label>
-              <div className="select-wrapper">
-                <select id="imageCount" className="custom-select" value={imageCount} onChange={(e) => setImageCount(parseInt(e.target.value))}>
-                  <option value="1">1 Image</option>
-                  <option value="2">2 Images</option>
-                  <option value="3">3 Images</option>
-                  <option value="4">4 Images</option>
-                  <option value="5">5 Images</option>
-                  <option value="6">6 Images</option>
-                  <option value="10">10 Images</option>
-                  <option value="15">15 Images</option>
-                  <option value="20">20 Images</option>
-                  <option value="25">25 Images</option>
-                  <option value="30">30 Images</option>
-                  <option value="35">35 Images</option>
-                  <option value="40">40 Images</option>
-                  <option value="45">45 Images</option>
-                  <option value="50">50 Images</option>
-                  <option value="100">100 Images</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="style" className="form-label">🎨 Art Style</label>
-              <div className="select-wrapper">
-                <select id="style" className="custom-select" value={style} onChange={(e) => setStyle(e.target.value)}>
-                  <option value="">Default</option>
-                  <option value="photorealistic">Photorealistic</option>
-                  <option value="digital art">Digital Art</option>
-                  <option value="oil painting">Oil Painting</option>
-                  <option value="watercolor">Watercolor</option>
-                  <option value="anime">Anime Style</option>
-                  <option value="cyberpunk">Cyberpunk</option>
-                  <option value="steampunk">Steampunk</option>
-                  <option value="fantasy art">Fantasy Art</option>
-                  <option value="abstract">Abstract</option>
-                  <option value="ghibli">Ghibli</option>
-                  <option value="vintage">Vintage</option>
-                  <option value="noir">Film Noir</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="quality" className="form-label">⚡ Quality Level</label>
-              <div className="select-wrapper">
-                <select id="quality" className="custom-select" value={quality} onChange={(e) => setQuality(e.target.value)}>
-                  <option value="standard">Standard</option>
-                  <option value="high">High Quality</option>
-                  <option value="ultra">Ultra HD</option>
-                  <option value="masterpiece">Masterpiece</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="seed" className="form-label">🎲 Seed (Optional)</label>
-              <input
-                type="text"
-                id="seed"
-                className="form-input"
-                value={seed}
-                onChange={(e) => {
-                  setSeed(e.target.value);
-                  // Disable enhance prompt when seed is provided
-                  if (e.target.value.trim() !== '') {
-                    setEnhancePrompt(false);
-                  }
-                }}
-                placeholder="Enter seed for reproducible results"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={useConsistentImages}
-                  onChange={(e) => {
-                    setUseConsistentImages(e.target.checked);
-                    if (e.target.checked) {
-                      setApiProvider('pollinations');
-                      setEnhancePrompt(false); // Disable enhance prompt when consistent images is enabled
-                    }
-                  }}
-                />
-                <span className="checkmark"></span>
-                🔄 Make Consistent Images (Auto-selects Pollinations AI)
-              </label>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="apiProvider" className="form-label">🔮 AI Engine</label>
-              <div className="select-wrapper">
-                <select 
-                  id="apiProvider" 
-                  className="custom-select" 
-                  value={apiProvider} 
-                  onChange={(e) => setApiProvider(e.target.value)}
-                  disabled={useConsistentImages || seed || isLoadingModels}
-                >
-                  <option value="random">🎲 Shuffle Random (LND AI, Better than Nano Banana)</option>
-                  <option value="pollinations">🌟 Pollinations AI (LND AI, Better than Nano Banana Pro)</option>
-                  
-                  {/* Dynamically loaded Pollination AI models */}
-                  {imageModels.map((model, index) => (
-                    <option key={`pollination-${model.id}-${index}`} value={model.id}>
-                      🤖 {model.name} (LND AI, Better than Google Nano Banana)
-                    </option>
-                  ))}
-                  
-                  {/* Legacy options for compatibility */}
-                  <option value="deepai">🤖 DeepAI Engine (LND AI, Better than Gemini Image Generator)</option>
-                  <option value="huggingface">🤗 Hugging Face Models (LND AI, Better than Nano Banana Fast)</option>
-                  <option value="modelslab">🔬 ModelsLab API (LND AI, Better than Google Nano Banana)</option>
-                  <option value="replicate">🔄 Replicate AI (LND AI, Better than Nano Banana Pro)</option>
-                  <option value="perchance">🎯 Perchance Generator (LND AI, Better than Gemini Image Generator)</option>
-                  <option value="raphaelai">🎭 Raphael AI (LND AI, Better than Nano Banana)</option>
-                  <option value="venice">🏛️ Venice AI (LND AI, Better than Google Nano Banana Fast)</option>
-                  <option value="nastia">💫 Nastia AI (LND AI, Better than Nano Banana Pro)</option>
-                  <option value="vadoo">📹 Vadoo AI (LND AI, Better than Gemini Image Generator)</option>
-                  <option value="aiscribble">✏️ AIScribble (LND AI, Better than Nano Banana)</option>
-                  <option value="dynapictures">📸 DynaPictures (LND AI, Better than Google Nano Banana)</option>
-                  <option value="gemini">💎 Gemini Vision (LND AI, Better than Nano Banana Fast)</option>
-                  <option value="sexyai">🔥 SexyAI Generator (LND AI, Better than Nano Banana Pro)</option>
-                  <option value="pornpen">🖊️ PornPen AI (LND AI, Better than Gemini Image Generator)</option>
-                  <option value="soulgen">👤 SoulGen (LND AI, Better than Nano Banana)</option>
-                  <option value="dreamgf">💕 DreamGF AI (LND AI, Better than Google Nano Banana)</option>
-                  <option value="icegirls">❄️ IceGirls AI (LND AI, Better than Nano Banana Fast)</option>
-                  <option value="nsfwai">🔞 NSFW AI Generator (LND AI, Better than Nano Banana Pro)</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <button type="submit" className="generate-btn" id="generateBtn" disabled={isGenerating || isEnhancing}>
-            <span className="btn-icon">🚀</span>
-            {isEnhancing ? 'Enhancing Prompt...' : isGenerating ? 'Generating...' : 'Generate Images using LND Ai'}
-          </button>
-        </form>
-      </div>
-
-      <div className="results-section slide-up">
-        <div className="results-header">
-          <h2 className="results-title">◆ Generated Images ◆</h2>
-          <div className="results-count" id="resultsCount">{generatedImages.length} Images</div>
         </div>
 
-        <div id="resultsContainer">
-          {isGenerating && generatedImages.length === 0 && (
-            <div className="loading-container">
-              <div className="loading-spinner"></div>
-              <div className="loading-text">Creating Your Masterpiece...</div>
-              <div className="loading-subtext">{statusText}</div>
-            </div>
-          )}
+        {/* Text Input */}
+        <div className="control-group" style={{ marginBottom: '25px' }}>
+          <label style={{ display: 'block', marginBottom: '10px', fontWeight: '600' }}>
+            📝 Text to Convert:
+          </label>
+          <textarea
+            value={settings.text}
+            onChange={(e) => setSettings(prev => ({ ...prev, text: e.target.value }))}
+            placeholder="Enter the text you want to convert to speech..."
+            style={{
+              width: '100%',
+              height: '120px',
+              padding: '15px',
+              background: 'var(--glass-bg)',
+              border: '2px solid var(--glass-border)',
+              borderRadius: '12px',
+              color: 'var(--text-light)',
+              fontSize: '16px',
+              resize: 'vertical',
+              fontFamily: 'inherit'
+            }}
+            maxLength={5000}
+          />
+          <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginTop: '5px' }}>
+            {settings.text.length}/5000 characters
+          </div>
+        </div>
 
-          {(generatedImages.length > 0) && (
-            <div className="image-grid">
-              {generatedImages.map((image, index) => (
-                <div key={index} className="image-card">
-                  <div className="image-container">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={image.url} alt={image.prompt} className="generated-image" loading="lazy" />
-                    <div className="image-overlay">
-                      <button onClick={() => downloadImage(image.url, `lnd-ai-generated-${index}.jpg`)} className="download-btn">
-                        ⬇️ Download
-                      </button>
-                    </div>
-                  </div>
-                  <div className="image-info">
-                    <div className="image-source">🎨 {image.provider}</div>
-                    <div className="image-prompt" style={{wordBreak: "break-all"}}>{image.prompt}</div>
-                  </div>
+        {/* Voice and Speed Controls */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px' }}>
+          <div className="control-group">
+            <label style={{ display: 'block', marginBottom: '10px', fontWeight: '600' }}>
+              🎭 Voice:
+            </label>
+            <select
+              value={settings.voice}
+              onChange={(e) => setSettings(prev => ({ ...prev, voice: e.target.value }))}
+              style={{
+                width: '100%',
+                padding: '12px',
+                background: 'var(--glass-bg)',
+                border: '2px solid var(--glass-border)',
+                borderRadius: '8px',
+                color: 'var(--text-light)',
+                fontSize: '16px'
+              }}
+            >
+              {settings.provider === 'api' ? (
+                apiVoices.map(voice => (
+                  <option key={voice.value} value={voice.value} style={{ background: '#1a1a1a' }}>
+                    {voice.label}
+                  </option>
+                ))
+              ) : (
+                browserVoices.map(voice => (
+                  <option key={voice.voiceURI} value={voice.voiceURI} style={{ background: '#1a1a1a' }}>
+                    {voice.name} ({voice.lang})
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
+          <div className="control-group">
+            <label style={{ display: 'block', marginBottom: '10px', fontWeight: '600' }}>
+              ⚡ Speed: {settings.speed}x
+            </label>
+            <input
+              type="range"
+              min="0.5"
+              max="2"
+              step="0.1"
+              value={settings.speed}
+              onChange={(e) => setSettings(prev => ({ ...prev, speed: parseFloat(e.target.value) }))}
+              style={{
+                width: '100%',
+                height: '6px',
+                background: 'var(--glass-border)',
+                borderRadius: '3px',
+                appearance: 'none',
+                cursor: 'pointer'
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)', marginTop: '5px' }}>
+              <span>0.5x</span>
+              <span>1.0x</span>
+              <span>2.0x</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Generate Button */}
+        <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+          <button
+            onClick={handleGenerate}
+            disabled={audioState.isLoading || !settings.text.trim()}
+            style={{
+              padding: '15px 30px',
+              background: audioState.isLoading || !settings.text.trim() 
+                ? 'var(--text-muted)' 
+                : 'linear-gradient(45deg, var(--primary-purple), var(--secondary-purple))',
+              border: 'none',
+              borderRadius: '12px',
+              color: 'white',
+              fontSize: '18px',
+              fontWeight: '600',
+              cursor: audioState.isLoading || !settings.text.trim() ? 'not-allowed' : 'pointer',
+              transition: 'all 0.3s ease',
+              minWidth: '200px'
+            }}
+          >
+            {audioState.isLoading ? (
+              <>⏳ Generating...</>
+            ) : (
+              <>🎵 Generate Speech</>
+            )}
+          </button>
+        </div>
+
+        {/* Audio Controls */}
+        {(audioUrl || (settings.provider === 'browser' && settings.text)) && (
+          <div className="audio-controls" style={{
+            background: 'var(--glass-bg)',
+            border: '2px solid var(--glass-border)',
+            borderRadius: '15px',
+            padding: '25px',
+            marginBottom: '25px'
+          }}>
+            <h3 style={{ marginBottom: '20px', textAlign: 'center' }}>🎵 Audio Controls</h3>
+            
+            {/* Progress Bar (only for API provider) */}
+            {settings.provider === 'api' && audioUrl && (
+              <div style={{ marginBottom: '20px' }}>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={audioState.duration ? (audioState.currentTime / audioState.duration) * 100 : 0}
+                  onChange={handleSeek}
+                  style={{
+                    width: '100%',
+                    height: '8px',
+                    background: 'var(--glass-border)',
+                    borderRadius: '4px',
+                    appearance: 'none',
+                    cursor: 'pointer'
+                  }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: 'var(--text-muted)', marginTop: '5px' }}>
+                  <span>{formatTime(audioState.currentTime)}</span>
+                  <span>{formatTime(audioState.duration)}</span>
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
+            )}
 
-          {isGenerating && generatedImages.length > 0 && (
-             <div className="loading-container" style={{padding: '40px'}}>
-                <div className="loading-spinner"></div>
-                <div className="loading-text">{statusText}</div>
-            </div>
-          )}
+            {/* Control Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
+              <button
+                onClick={togglePlayPause}
+                style={{
+                  padding: '12px 20px',
+                  background: audioState.isPlaying 
+                    ? 'linear-gradient(45deg, #ff6b6b, #ff8e8e)' 
+                    : 'linear-gradient(45deg, var(--primary-purple), var(--secondary-purple))',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                {audioState.isPlaying ? '⏸️ Pause' : '▶️ Play'}
+              </button>
 
-          {!isGenerating && generatedImages.length === 0 && (
-            <div className="empty-state">
-              <div className="empty-icon">🎨</div>
-              <div className="empty-text">Ready to Generate Free Images</div>
-              <div className="empty-subtext">Enter your prompt above and let LND AI bring your imagination to life</div>
+              <button
+                onClick={stopSpeech}
+                style={{
+                  padding: '12px 20px',
+                  background: 'linear-gradient(45deg, #6c757d, #868e96)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                ⏹️ Stop
+              </button>
+
+              {settings.provider === 'api' && audioUrl && (
+                <button
+                  onClick={downloadAudio}
+                  style={{
+                    padding: '12px 20px',
+                    background: 'linear-gradient(45deg, #28a745, #34ce57)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: 'white',
+                    fontSize: '16px',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  💾 Download MP3
+                </button>
+              )}
             </div>
-          )}
+          </div>
+        )}
+
+        {/* Hidden Audio Element */}
+        {audioUrl && (
+          <audio
+            ref={audioRef}
+            src={audioUrl}
+            preload="metadata"
+            style={{ display: 'none' }}
+          />
+        )}
+
+        {/* Messages */}
+        {errorMessage && (
+          <div style={{
+            background: 'rgba(220, 53, 69, 0.2)',
+            border: '2px solid #dc3545',
+            borderRadius: '8px',
+            padding: '15px',
+            marginBottom: '20px',
+            color: '#dc3545',
+            textAlign: 'center'
+          }}>
+            ❌ {errorMessage}
+          </div>
+        )}
+
+        {successMessage && (
+          <div style={{
+            background: 'rgba(40, 167, 69, 0.2)',
+            border: '2px solid #28a745',
+            borderRadius: '8px',
+            padding: '15px',
+            marginBottom: '20px',
+            color: '#28a745',
+            textAlign: 'center'
+          }}>
+            ✅ {successMessage}
+          </div>
+        )}
+
+        {/* Info Section */}
+        <div style={{
+          background: 'var(--glass-bg)',
+          border: '2px solid var(--glass-border)',
+          borderRadius: '12px',
+          padding: '20px',
+          marginTop: '30px'
+        }}>
+          <h3 style={{ marginBottom: '15px' }}>ℹ️ How to Use</h3>
+          <ul style={{ lineHeight: '1.6', color: 'var(--text-muted)' }}>
+            <li><strong>API Provider:</strong> High-quality speech generation using external APIs. Supports MP3 download.</li>
+            <li><strong>Browser TTS:</strong> Uses your browser's built-in text-to-speech engine. Works offline.</li>
+            <li><strong>Voice Selection:</strong> Choose from available voices based on your selected provider.</li>
+            <li><strong>Speed Control:</strong> Adjust speech rate from 0.5x to 2x for optimal listening.</li>
+            <li><strong>Audio Controls:</strong> Play, pause, stop, and download generated speech.</li>
+          </ul>
         </div>
       </div>
     </section>
   );
 };
 
-export default TextToImage;
+export default TextToSpeech;
