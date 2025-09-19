@@ -128,40 +128,9 @@ async function generateWithVoiceRSS(text: string, voice: string, language: strin
   }
 }
 
-// New Provider: ResponsiveVoice (Fallback)
-async function generateWithResponsiveVoice(text: string, voice: string) {
-  try {
-    const voiceMapping: { [key: string]: string } = {
-      'female': 'US English Female',
-      'male': 'US English Male'
-    };
-    
-    const rvVoice = voiceMapping[voice] || 'US English Female';
-    
-    // ResponsiveVoice API endpoint (requires API key for commercial use)
-    const params = new URLSearchParams({
-      t: text.substring(0, 1000),
-      tl: rvVoice,
-      sv: '', // Speed/Volume parameters
-      vn: '', // Voice name
-      pitch: '1',
-      rate: '1',
-      vol: '1'
-    });
-
-    // This is a simplified implementation - in production you'd need proper API integration
-    const audioUrl = `https://responsivevoice.com/responsivevoice/getvoice.php?${params.toString()}`;
-    
-    return audioUrl;
-  } catch (error) {
-    console.error('ResponsiveVoice generation failed:', error);
-    throw error;
-  }
-}
-
 export async function POST(request: Request) {
   try {
-    const { text, voice = 'female', speed = 1.0, language = 'en-US', provider = 'auto' } = await request.json();
+    const { text, voice = 'female', speed = 1.0, language = 'en-US' } = await request.json();
 
     // Input validation
     if (!text || typeof text !== 'string') {
