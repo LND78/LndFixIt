@@ -341,7 +341,7 @@ const TextToImage = () => {
                   className="custom-select" 
                   value={apiProvider} 
                   onChange={(e) => setApiProvider(e.target.value)}
-                  disabled={useConsistentImages || seed || isLoadingModels}
+                  disabled={useConsistentImages || !!seed || isLoadingModels}
                 >
                   <option value="random">🎲 Shuffle Random (LND AI, Better than Nano Banana)</option>
                   <option value="pollinations">🌟 Pollinations AI (LND AI, Better than Nano Banana Pro)</option>

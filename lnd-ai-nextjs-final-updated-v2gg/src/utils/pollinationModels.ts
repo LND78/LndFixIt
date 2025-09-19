@@ -29,13 +29,19 @@ export async function fetchTextModels(): Promise<PollinationModel[]> {
     let models: PollinationModel[] = [];
     
     if (Array.isArray(data)) {
-      models = data.map((model: any) => ({
-        id: model.id || model,
-        name: model.name || model.id || model,
-        type: 'text' as const,
-        capabilities: model.capabilities || [],
-        voices: model.voices || []
-      }));
+      type TextModelFromApi = string | { id?: string; name?: string; capabilities?: string[]; voices?: string[] };
+      models = data.map((model: TextModelFromApi) => {
+        if (typeof model === 'string') {
+          return { id: model, name: model, type: 'text' as const, capabilities: [], voices: [] };
+        }
+        return {
+          id: model.id || model.name || 'unknown',
+          name: model.name || model.id || 'unknown',
+          type: 'text' as const,
+          capabilities: model.capabilities || [],
+          voices: model.voices || []
+        };
+      });
     } else if (typeof data === 'object') {
       models = Object.keys(data).map(key => ({
         id: key,
@@ -105,12 +111,18 @@ export async function fetchImageModels(): Promise<PollinationModel[]> {
     let models: PollinationModel[] = [];
     
     if (Array.isArray(data)) {
-      models = data.map((model: any) => ({
-        id: model.id || model,
-        name: model.name || model.id || model,
-        type: 'image' as const,
-        capabilities: model.capabilities || []
-      }));
+      type ImageModelFromApi = string | { id?: string; name?: string; capabilities?: string[] };
+      models = data.map((model: ImageModelFromApi) => {
+        if (typeof model === 'string') {
+          return { id: model, name: model, type: 'image' as const, capabilities: [] };
+        }
+        return {
+          id: model.id || model.name || 'unknown',
+          name: model.name || model.id || 'unknown',
+          type: 'image' as const,
+          capabilities: model.capabilities || []
+        };
+      });
     } else if (typeof data === 'object') {
       models = Object.keys(data).map(key => ({
         id: key,

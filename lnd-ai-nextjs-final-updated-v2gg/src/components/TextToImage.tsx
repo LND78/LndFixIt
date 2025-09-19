@@ -125,15 +125,10 @@ const TextToImage = () => {
       // Generate a random 2-digit number to prevent caching
       const randomSuffix = Math.floor(Math.random() * 90) + 10; // Generates 10-99
       
-      // Use the direct URL approach for faster and better results
-      const enhanceUrl = `https://text.pollinations.ai/prompt/${encodeURIComponent(originalPrompt)}?model=text-davinci-003&prompt_template=enhance_this_prompt_make_a_LND_logo_,_you_only_have_to_give_paragraph_to_directly_feed_model_${randomSuffix}`;
-      // The above URL is a placeholder. The actual Pollination AI API for prompt enhancement is more direct.
-      // For a clean output, we should use a dedicated endpoint or a more controlled prompt template.
-      // For now, let's simplify the URL to get a direct text response without the conversational wrapper.
-      // The user's example `https://text.pollinations.ai/enhance_this_prompt_make_a_LND_logo_,_you_only_have_to_give_paragraph_to_directly_feed_model_86`
-      // suggests a direct text generation from the URL path. Let's adapt to that.
-      const cleanEnhanceUrl = `https://text.pollinations.ai/enhance_this_prompt_${encodeURIComponent(originalPrompt.replace(/ /g, '_'))}_${randomSuffix}`;
-      const response = await fetch(cleanEnhanceUrl);
+      const promptWithUnderscores = originalPrompt.replace(/ /g, '_');
+      const enhanceUrl = `https://text.pollinations.ai/enhance_this_prompt_${promptWithUnderscores}_,_you_only_have_to_give_paragraph_to_directly_feed_model_keep_in_mind_only_give_output_as_prompt_paragraph_without_any_other_text_${randomSuffix}`;
+
+      const response = await fetch(enhanceUrl);
       
       if (response.ok) {
         const enhancedText = await response.text();
@@ -332,7 +327,7 @@ const TextToImage = () => {
                   className="custom-select" 
                   value={apiProvider} 
                   onChange={(e) => setApiProvider(e.target.value)}
-                  disabled={useConsistentImages || seed || isLoadingModels}
+                  disabled={useConsistentImages || !!seed || isLoadingModels}
                 >
                   <option value="random">🎲 Shuffle Random (LND AI, Better than Nano Banana)</option>
                   <option value="pollinations">🌟 Pollinations AI (LND AI, Better than Nano Banana Pro)</option>
