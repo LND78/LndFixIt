@@ -122,19 +122,20 @@ const TextToImage = () => {
 
   const enhancePromptWithAI = async (originalPrompt: string): Promise<string> => {
     try {
-      // Generate a random 2-digit number to prevent caching, as requested.
-      const randomSuffix = Math.floor(Math.random() * 90) + 10; // Generates 10-99
-      
-      // Per user instructions, replace spaces with underscores.
+      // **THE CORRECT FIX:** Following user's instructions precisely.
+
+      // 1. Generate a random 2-digit number for cache busting.
+      const randomSuffix = Math.floor(Math.random() * 90) + 10; // 10-99
+
+      // 2. Replace all spaces in the user's prompt with underscores.
       const promptWithUnderscores = originalPrompt.replace(/ /g, '_');
       
-      // The crucial fix: URL-encode the prompt after replacing spaces.
-      // This ensures any special characters (like commas, quotes, etc.) are handled correctly
-      // and not misinterpreted by the API, which was the cause of the original issue.
-      const encodedPrompt = encodeURIComponent(promptWithUnderscores);
+      // 3. Construct the exact URL path "magic phrase" that the Pollinations API expects.
+      // This structure is rigid and must be followed exactly.
+      const urlPath = `enhance_this_prompt_${promptWithUnderscores}_,_you_only_have_to_give_paragraph_to_directly_feed_model_keep_in_mind_only_give_output_as_prompt_paragraph_without_any_other_text_${randomSuffix}`;
 
-      // Construct the final URL according to the specified pattern.
-      const enhanceUrl = `https://text.pollinations.ai/enhance_this_prompt_${encodedPrompt}_,_you_only_have_to_give_paragraph_to_directly_feed_model_keep_in_mind_only_give_output_as_prompt_paragraph_without_any_other_text_${randomSuffix}`;
+      // 4. Create the final URL. No further encoding is needed on this pre-formatted path.
+      const enhanceUrl = `https://text.pollinations.ai/${urlPath}`;
 
       const response = await fetch(enhanceUrl);
       
@@ -155,39 +156,48 @@ const TextToImage = () => {
     event.preventDefault();
     if (isGenerating || isEnhancing) return;
 
-    // Store the original prompt if not already stored
+    // Use a temporary variable for the prompt to avoid state update delays
+    let promptForGeneration = prompt;
+    
+    // Store the original prompt when the user submits, if they haven't changed it since last time
     if (!originalPrompt) {
       setOriginalPrompt(prompt);
     }
-
-    let finalPrompt = prompt;
 
     // Enhance prompt if enabled and not using consistent images or seed
     if (enhancePrompt && !useConsistentImages && seed.trim() === '') {
       setIsEnhancing(true);
       setStatusText('Enhancing your prompt with AI...');
-      // Use original prompt for enhancement, or current prompt if no original is stored
+      // Always enhance the *original* prompt the user wrote, not a previously enhanced one
       const promptToEnhance = originalPrompt || prompt;
-      finalPrompt = await enhancePromptWithAI(promptToEnhance);
+      const enhancedVersion = await enhancePromptWithAI(promptToEnhance);
+      
+      // Update the text area with the new prompt so the user sees it
+      setPrompt(enhancedVersion);
+      // Use the newly enhanced prompt for this generation cycle
+      promptForGeneration = enhancedVersion;
       setIsEnhancing(false);
     }
 
     setIsGenerating(true);
     setGeneratedImages([]);
+    
+    // Reset original prompt so next submission captures the current text field value
+    setOriginalPrompt('');
 
-    let enhancedPrompt = finalPrompt;
-    if (style) enhancedPrompt += `, ${style} style`;
-    if (quality) enhancedPrompt += `, ${quality} quality`;
+    let finalPrompt = promptForGeneration;
+    if (style) finalPrompt += `, ${style} style`;
+    if (quality) finalPrompt += `, ${quality} quality`;
 
     const newImages: GeneratedImage[] = [];
 
     for (let i = 0; i < imageCount; i++) {
       setStatusText(`Generating image ${i + 1} of ${imageCount}...`);
       try {
-        const imageData = await generateSingleImage(enhancedPrompt, apiProvider, i);
+        const imageData = await generateSingleImage(finalPrompt, apiProvider, i);
         if (imageData) {
           newImages.push(imageData);
-          setGeneratedImages([...newImages]);
+          setGeneratedImages(prevImages => [...prevImages, imageData]);
         }
       } catch (error) {
         console.error(error);
@@ -225,10 +235,8 @@ const TextToImage = () => {
                 value={prompt}
                 onChange={(e) => {
                   setPrompt(e.target.value);
-                  // Store original prompt when user starts typing
-                  if (!originalPrompt && e.target.value.trim()) {
-                    setOriginalPrompt(e.target.value);
-                  }
+                  // Continuously update the original prompt as the user types
+                  setOriginalPrompt(e.target.value);
                 }}
               ></textarea>
             </div>
@@ -417,23 +425,4 @@ const TextToImage = () => {
           )}
 
           {isGenerating && generatedImages.length > 0 && (
-             <div className="loading-container" style={{padding: '40px'}}>
-                <div className="loading-spinner"></div>
-                <div className="loading-text">{statusText}</div>
-            </div>
-          )}
-
-          {!isGenerating && generatedImages.length === 0 && (
-            <div className="empty-state">
-              <div className="empty-icon">🎨</div>
-              <div className="empty-text">Ready to Generate Free Images</div>
-              <div className="empty-subtext">Enter your prompt above and let LND AI bring your imagination to life</div>
-            </div>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-};
-
-export default TextToImage;
+             
