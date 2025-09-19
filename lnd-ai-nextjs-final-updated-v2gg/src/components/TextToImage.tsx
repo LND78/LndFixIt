@@ -152,6 +152,7 @@ const TextToImage = () => {
     }
 
     let finalPrompt = prompt;
+    let promptWasEnhanced = false;
 
     // Enhance prompt if enabled and not using consistent images or seed
     if (enhancePrompt && !useConsistentImages && seed.trim() === '') {
@@ -160,22 +161,26 @@ const TextToImage = () => {
       // Use original prompt for enhancement, or current prompt if no original is stored
       const promptToEnhance = originalPrompt || prompt;
       finalPrompt = await enhancePromptWithAI(promptToEnhance);
+      setPrompt(finalPrompt); // Update the textarea with the enhanced prompt
+      promptWasEnhanced = true;
       setIsEnhancing(false);
     }
 
     setIsGenerating(true);
     setGeneratedImages([]);
 
-    let enhancedPrompt = finalPrompt;
-    if (style) enhancedPrompt += `, ${style} style`;
-    if (quality) enhancedPrompt += `, ${quality} quality`;
+    let imageGenerationPrompt = finalPrompt;
+    if (!promptWasEnhanced) {
+      if (style) imageGenerationPrompt += `, ${style} style`;
+      if (quality) imageGenerationPrompt += `, ${quality} quality`;
+    }
 
     const newImages: GeneratedImage[] = [];
 
     for (let i = 0; i < imageCount; i++) {
       setStatusText(`Generating image ${i + 1} of ${imageCount}...`);
       try {
-        const imageData = await generateSingleImage(enhancedPrompt, apiProvider, i);
+        const imageData = await generateSingleImage(imageGenerationPrompt, apiProvider, i);
         if (imageData) {
           newImages.push(imageData);
           setGeneratedImages([...newImages]);
