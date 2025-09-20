@@ -8,6 +8,11 @@ export default function Home() {
         Your all-in-one suite of free AI-powered tools. Select a tool below to get started.
       </p>
       <div className="tools-grid">
+        <Link href="/pdf-editor" className="tool-card">
+          <span className="tool-icon">📄</span>
+          <h3 className="tool-title">PDF Editor</h3>
+          <p className="tool-description">Edit, annotate, and manage your PDF documents with a powerful client-side editor.</p>
+        </Link>
         <Link href="/text-to-image" className="tool-card">
           <span className="tool-icon">🎨</span>
           <h3 className="tool-title">Text to Image</h3>
