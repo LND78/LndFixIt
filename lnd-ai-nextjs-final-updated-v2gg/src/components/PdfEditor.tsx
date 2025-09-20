@@ -200,7 +200,7 @@ const PdfEditor = () => {
   const handleSave = async () => {
     const pdfBytes = await generatePdfBytes();
     if (!pdfBytes) return;
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const blob = new Blob([pdfBytes.slice()], { type: 'application/pdf' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = `edited-${pdfFile?.name || 'document.pdf'}`;
