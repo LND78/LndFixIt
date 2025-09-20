@@ -42,8 +42,8 @@ const TextToSpeech = () => {
   
   // Available voices for different providers
   const apiVoices = [
-    { value: 'female', label: '👩 Female Voice (English)' },
-    { value: 'male', label: '👨 Male Voice (English)' }
+    { value: 'female', label: 'ðŸ‘© Female Voice (English)' },
+    { value: 'male', label: 'ðŸ‘¨ Male Voice (English)' }
   ];
   
   const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -292,7 +292,7 @@ const TextToSpeech = () => {
   return (
     <section className="control-panel slide-up">
       <h2 className="results-title" style={{ marginBottom: '30px' }}>
-        🔊 Text to Speech Generator
+        ðŸ”Š Text to Speech Generator
       </h2>
       <p className="subtitle" style={{ textAlign: 'center', marginBottom: '40px' }}>
         Convert text to natural-sounding speech with multiple provider options and full audio controls.
@@ -302,7 +302,7 @@ const TextToSpeech = () => {
         {/* Provider Selection */}
         <div className="control-group" style={{ marginBottom: '25px' }}>
           <label style={{ display: 'block', marginBottom: '10px', fontWeight: '600' }}>
-            🎛️ Provider:
+            ðŸŽ›ï¸ Provider:
           </label>
           <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
             <button
@@ -318,7 +318,7 @@ const TextToSpeech = () => {
                 transition: 'all 0.3s ease'
               }}
             >
-              🌐 API Provider (High Quality)
+              ðŸŒ API Provider (High Quality)
             </button>
             <button
               className={`provider-btn ${settings.provider === 'browser' ? 'active' : ''}`}
@@ -333,7 +333,7 @@ const TextToSpeech = () => {
                 transition: 'all 0.3s ease'
               }}
             >
-              🖥️ Browser TTS (Built-in)
+              ðŸ–¥ï¸ Browser TTS (Built-in)
             </button>
           </div>
         </div>
@@ -341,7 +341,7 @@ const TextToSpeech = () => {
         {/* Text Input */}
         <div className="control-group" style={{ marginBottom: '25px' }}>
           <label style={{ display: 'block', marginBottom: '10px', fontWeight: '600' }}>
-            📝 Text to Convert:
+            ðŸ“ Text to Convert:
           </label>
           <textarea
             value={settings.text}
@@ -370,7 +370,7 @@ const TextToSpeech = () => {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px' }}>
           <div className="control-group">
             <label style={{ display: 'block', marginBottom: '10px', fontWeight: '600' }}>
-              🎭 Voice:
+              ðŸŽ­ Voice:
             </label>
             <select
               value={settings.voice}
@@ -403,7 +403,7 @@ const TextToSpeech = () => {
 
           <div className="control-group">
             <label style={{ display: 'block', marginBottom: '10px', fontWeight: '600' }}>
-              ⚡ Speed: {settings.speed}x
+              âš¡ Speed: {settings.speed}x
             </label>
             <input
               type="range"
@@ -450,9 +450,9 @@ const TextToSpeech = () => {
             }}
           >
             {audioState.isLoading ? (
-              <>⏳ Generating...</>
+              <>â³ Generating...</>
             ) : (
-              <>🎵 Generate Speech</>
+              <>ðŸŽµ Generate Speech</>
             )}
           </button>
         </div>
@@ -466,7 +466,7 @@ const TextToSpeech = () => {
             padding: '25px',
             marginBottom: '25px'
           }}>
-            <h3 style={{ marginBottom: '20px', textAlign: 'center' }}>🎵 Audio Controls</h3>
+            <h3 style={{ marginBottom: '20px', textAlign: 'center' }}>ðŸŽµ Audio Controls</h3>
             
             {/* Progress Bar (only for API provider) */}
             {settings.provider === 'api' && audioUrl && (
@@ -510,7 +510,7 @@ const TextToSpeech = () => {
                   transition: 'all 0.3s ease'
                 }}
               >
-                {audioState.isPlaying ? '⏸️ Pause' : '▶️ Play'}
+                {audioState.isPlaying ? 'â¸ï¸ Pause' : 'â–¶ï¸ Play'}
               </button>
 
               <button
@@ -526,7 +526,7 @@ const TextToSpeech = () => {
                   transition: 'all 0.3s ease'
                 }}
               >
-                ⏹️ Stop
+                â¹ï¸ Stop
               </button>
 
               {settings.provider === 'api' && audioUrl && (
@@ -543,7 +543,7 @@ const TextToSpeech = () => {
                     transition: 'all 0.3s ease'
                   }}
                 >
-                  💾 Download MP3
+                  ðŸ’¾ Download MP3
                 </button>
               )}
             </div>
@@ -571,7 +571,7 @@ const TextToSpeech = () => {
             color: '#dc3545',
             textAlign: 'center'
           }}>
-            ❌ {errorMessage}
+            âŒ {errorMessage}
           </div>
         )}
 
@@ -585,7 +585,7 @@ const TextToSpeech = () => {
             color: '#28a745',
             textAlign: 'center'
           }}>
-            ✅ {successMessage}
+            âœ… {successMessage}
           </div>
         )}
 
@@ -597,7 +597,7 @@ const TextToSpeech = () => {
           padding: '20px',
           marginTop: '30px'
         }}>
-          <h3 style={{ marginBottom: '15px' }}>ℹ️ How to Use</h3>
+          <h3 style={{ marginBottom: '15px' }}>â„¹ï¸ How to Use</h3>
           <ul style={{ lineHeight: '1.6', color: 'var(--text-muted)' }}>
             <li><strong>API Provider:</strong> High-quality speech generation using external APIs. Supports MP3 download.</li>
             <li><strong>Browser TTS:</strong> Uses your browser&apos;s built-in text-to-speech engine. Works offline.</li>
